@@ -1,0 +1,7 @@
+[database]
+system=sqlite
+database=comments
+
+[slack]
+token=<slack token>
+channel=<channel to post to>
