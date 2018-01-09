@@ -1,6 +1,8 @@
 ## SlackSimulator
 SlackSimulator is a simulator which takes all public messages from your organization's Slack instance and uses markov chains to output messages which sound similar to what a user would say.
 
+This is based heavily on https://github.com/Deimos/SubredditSimulator
+
 ### Installation
 
     python setup.py install
