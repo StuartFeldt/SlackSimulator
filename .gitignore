@@ -1,5 +1,6 @@
 slack_simulator.cfg
 comments
+slacksimulator.db
 dist
 build
 SlackSimulator.egg-info

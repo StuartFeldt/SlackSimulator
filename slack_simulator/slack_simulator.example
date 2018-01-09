@@ -1,6 +1,6 @@
 [database]
 system=sqlite
-database=comments
+database=slacksimulator.db
 
 [slack]
 token=<slack token>
