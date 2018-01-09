@@ -38,24 +38,45 @@ for channel in channels.get('channels'):
 			print "Too far back..stopping"
 			break
 
-		if(latest):
-			msg_results = sc.api_call("channels.history",channel=channel_id,latest=latest)
-		else:
-			msg_results = sc.api_call("channels.history",channel=channel_id)
-		if(len(msg_results['messages']) == 0):
+		try:
+			if(latest):
+				msg_results = sc.api_call("channels.history",channel=channel_id,latest=latest)
+			else:
+				msg_results = sc.api_call("channels.history",channel=channel_id)
+		except ValueError:
+			print "VALUE ERROR"
+			break
+
+		if('messages' not in msg_results or len(msg_results['messages']) == 0):
 			print "Out of messages"
 			break
 		
 		for message in msg_results['messages']:
-			if('user' in message and message['user'].lower() not in users):
-				user = sc.api_call("users.info",user=message['user'])
-				account = Account(user['user']['name'], message['user'])
-				account.special_class =user['user']['profile']['image_72']
-				account.can_comment = not user['user']['deleted']
-				account.save()
-				users.append(message['user'].lower())
-			
 			try:
+				author = "Unknown"
+				if('user' in message and message['user'].lower() not in users):
+					user = sc.api_call("users.info",user=message['user'])
+					account = Account(user['user']['name'], message['user'])
+					account.special_class =user['user']['profile']['image_72']
+					account.can_comment = not user['user']['deleted']
+					account.save()
+					users.append(message['user'].lower())
+					author = message['user']
+
+				if('bot_id' in message and message['bot_id'] is not None and message['bot_id'].lower() not in users):
+					bot_name = message['username'] if 'username' in message else "BOT"
+					account = Account(bot_name, message['bot_id'])
+					if('emoji' in message['icons']):
+						account.special_class = message['icons']['emoji']
+					elif('image_48' in message['icons']):
+						account.special_class = message['icons']['image_48']
+					elif('image_72' in message['icons']):
+						account.special_class = message['icons']['image_72']
+					account.can_comment = True
+					account.save()
+					users.append(message['bot_id'].lower())
+					author = message['username']
+			
 				if(not latest):
 					latest = message['ts']
 				else:
@@ -63,7 +84,6 @@ for channel in channels.get('channels'):
 						latest = message['ts']
 				
 				comment = {}
-				comment['id'] = 1
 				comment['slack_user'] = message['user'].lower()
 				comment['date'] = float(message['ts'])
 				comment['is_top_level'] = True
@@ -79,5 +99,5 @@ for channel in channels.get('channels'):
 				
 				commentModel = Comment(comment)
 				commentModel.save()
-			except Exception:
+			except Exception as e:
 				pass

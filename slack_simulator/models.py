@@ -47,7 +47,6 @@ class SlackSimulatorText(markovify.Text):
 
 class Account(Base):
     __tablename__ = "accounts"
-
     name = Column(String(20), primary_key=True)
     slack_user = Column(String(21))
     special_class = Column(String(50))
@@ -220,7 +219,6 @@ class Account(Base):
 class Comment(Base):
     __tablename__ = "comments"
 
-    id = Column(String(10))
     slack_user = Column(String(21))
     date = Column(DateTime)
     author = Column(String(20))
@@ -236,7 +234,6 @@ class Comment(Base):
         db.commit()
 
     def __init__(self, comment):
-        self.id = comment['id']
         self.slack_user = comment['slack_user']
         self.date = datetime.utcfromtimestamp(comment['date'])
         if comment['author']:

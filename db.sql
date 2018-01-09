@@ -1,6 +1,5 @@
 BEGIN TRANSACTION;
 CREATE TABLE `comments` (
-	`id`	INTEGER,
 	`slack_user`	TEXT,
 	`date`	TEXT,
 	`author`	TEXT,
