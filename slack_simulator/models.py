@@ -18,9 +18,9 @@ from sqlalchemy.sql.expression import func
 
 from database import Base, JSONSerialized, db
 
-MAX_OVERLAP_RATIO =.5
+MAX_OVERLAP_RATIO = .5
 MAX_OVERLAP_TOTAL = 10
-DEFAULT_TRIES = 10000
+DEFAULT_TRIES = 1000000
 
 class SlackSimulatorText(markovify.Text):
     html_parser = HTMLParser.HTMLParser()
@@ -79,62 +79,16 @@ class Account(Base):
 
         return self._session
 
-    @property
-    def is_able_to_submit(self):
-        captcha_exempt = self.comment_karma > 5 or self.link_karma > 2
-        return self.can_submit and captcha_exempt
-
-    def get_comments_from_site(self, limit=None, store_in_db=True):
-        slack_user = self.session.get_slack_user(self.slack_user)
-
-        # get the newest comment we've previously seen as a stopping point
-        last_comment = (
-            db.query(Comment)
-                .filter_by(slack_user=self.slack_user)
-                .order_by(Comment.date.desc())
-                .first()
-        )
-
-        seen_ids = set()
-        comments = []
-
-        for comment in slack_user.get_comments(limit=limit):
-            comment = Comment(comment)
-
-            if last_comment:
-                if (comment.id == last_comment.id or 
-                        comment.date <= last_comment.date):
-                    break
-
-            # somehow there are occasionally duplicates - skip over them
-            if comment.id in seen_ids:
-                continue
-            seen_ids.add(comment.id)
-
-            comments.append(comment)
-            if store_in_db:
-                db.add(comment)
-
-        if store_in_db:
-            db.commit()
-        return comments
-
-    def should_include_comment(self, comment):
-        return True
-
     def get_comments_for_training(self, limit=None):
         comments = (db.query(Comment)
             .filter_by(slack_user=self.slack_user)
             .order_by(func.random())
             .limit(10000)
         )
-        valid_comments = [comment for comment in comments
-            if self.should_include_comment(comment)]
-        return valid_comments
+        
+        return comments
 
-    def train_from_comments(self, get_new_comments=False):
-        if get_new_comments:
-            self.get_comments_from_site()
+    def train_from_comments(self):
 
         comments = []
         for comment in self.get_comments_for_training():
@@ -154,17 +108,18 @@ class Account(Base):
             state_size = 3
         else:
             state_size = 2
-
+        print str(len(valid_comments)) + " valid comments"
         self.comment_model = SlackSimulatorText("\n".join(valid_comments), state_size=state_size)
 
     def make_comment_sentence(self):
         # self.chain = self.comment_model
-        return self.comment_model.make_sentence(tries=10000,
+        return self.comment_model.make_sentence(tries=100000,
             max_overlap_total=MAX_OVERLAP_TOTAL,
             max_overlap_ratio=MAX_OVERLAP_RATIO)
 
     def build_comment(self):
         comment = ""
+        tries = 0
         while True:
             # For each sentence, check how close to the average comment length
             # we are, then use the remaining percentage as the chance of
@@ -173,14 +128,22 @@ class Account(Base):
             # another sentence. We're also adding a fixed 10% on top of that
             # just to increase the length a little, and have some chance of
             # continuing once we're past the average.
+            tries = tries + 1
             portion_done = len(comment) / float(self.avg_comment_len)
             continue_chance = 1.0 - portion_done
             continue_chance = max(0, continue_chance)
             continue_chance += 0.1
-            if random.random() > continue_chance:
+            random_value = random.random()
+            if  random_value > continue_chance:
+                break
+
+            if  tries > 10:
                 break
 
             new_sentence = self.make_comment_sentence()
+
+            if not new_sentence:
+                continue
             comment += " " + new_sentence
 
         comment = comment.strip()
@@ -189,7 +152,7 @@ class Account(Base):
 
     def make_selftext_sentence(self):
         if self.selftext_model:
-            return self.selftext_model.make_sentence(tries=10000,
+            return self.selftext_model.make_sentence(tries=100000,
                 max_overlap_total=MAX_OVERLAP_TOTAL,
                 max_overlap_ratio=MAX_OVERLAP_RATIO)
         else:
@@ -202,7 +165,8 @@ class Account(Base):
         print name.name
         try:
             comment = self.build_comment()
-        except Exception:
+        except Exception, e:
+            print e
             self.last_commented = datetime.now()
             self.num_comments += 1
             db.add(self)
@@ -231,7 +195,12 @@ class Comment(Base):
 
     def save(self):
         db.add(self)
-        db.commit()
+        try:
+            db.commit()
+        except Exception as ex:
+            db.rollback()
+            db.add(self)
+            db.commit()
 
     def __init__(self, comment):
         self.slack_user = comment['slack_user']

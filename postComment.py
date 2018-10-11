@@ -8,21 +8,30 @@ import os
 import time
 import datetime
 
-cfg = SafeConfigParser()
-cfg.read("slack_simulator/slack_simulator.cfg")
-token = cfg.get("slack", "token")
+def tryToGetComment(tries):
+	if tries > 3:
+		print "Giving up for now"
+		return
 
-sim = Simulator()
-sc = SlackClient(token);
+	cfg = SafeConfigParser()
+	cfg.read("slack_simulator/slack_simulator.cfg")
+	token = cfg.get("slack", "token")
 
-result = sim.make_comment()
-print result
-slack_channel = cfg.get("slack", "channel")
-if(result):
-	sc.api_call(
-	  "chat.postMessage",
-	  channel=slack_channel,
-	  text=result['comment'],
-	  username=result['name'],
-	  icon_url=result['picture']
+	sim = Simulator()
+	sc = SlackClient(token);
+
+	result = sim.make_comment()
+	print result
+	slack_channel = cfg.get("slack", "channel")
+	if(result):
+		sc.api_call(
+		"chat.postMessage",
+		channel=slack_channel,
+		text=result['comment'],
+		username=result['name'],
+		icon_url=result['picture']
 	)
+	else:
+		return tryToGetComment(tries + 1)
+
+tryToGetComment(1)
