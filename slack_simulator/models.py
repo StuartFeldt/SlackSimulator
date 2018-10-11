@@ -18,29 +18,27 @@ from sqlalchemy.sql.expression import func
 
 from database import Base, JSONSerialized, db
 
-MAX_OVERLAP_RATIO = .5
-MAX_OVERLAP_TOTAL = 10
+MAX_OVERLAP_RATIO = .33
+MAX_OVERLAP_TOTAL =  7
 DEFAULT_TRIES = 1000000
 
 class SlackSimulatorText(markovify.Text):
     html_parser = HTMLParser.HTMLParser()
 
-    def test_sentence_input(self, sentence):
-        return True
-
     def _prepare_text(self, text):
+        text = text.decode("utf8")
         text = self.html_parser.unescape(text)
-        text = text.strip()
+        # text = text.strip()
         if not text.endswith((".", "?", "!")):
-            text += "."
-
+            text += ". "
         return text
 
     def sentence_split(self, text):
         # split everything up by newlines, prepare them, and join back together
         lines = text.splitlines()
-        text = " ".join([self._prepare_text(line)
-            for line in lines if line.strip()])
+        text = ""
+        for line in lines:
+            text = text + self._prepare_text(line)
 
         return markovify.split_into_sentences(text)
 
@@ -70,14 +68,6 @@ class Account(Base):
         self.can_submit = can_submit
         self.added = datetime.now(pytz.utc)
 
-    @property
-    def session(self):
-        if not hasattr(self, "_session"):
-            self._session = praw.Reddit(Settings["user agent"])
-            self._session.login(
-                self.name, Settings["password"], disable_warning=True)
-
-        return self._session
 
     def get_comments_for_training(self, limit=None):
         comments = (db.query(Comment)
@@ -109,11 +99,15 @@ class Account(Base):
         else:
             state_size = 2
         print str(len(valid_comments)) + " valid comments"
-        self.comment_model = SlackSimulatorText("\n".join(valid_comments), state_size=state_size)
+        all_comments = ""
+        for c in valid_comments:
+            all_comments = all_comments + "\n" + c
+
+        self.comment_model = SlackSimulatorText(all_comments.encode('utf-8').strip())
 
     def make_comment_sentence(self):
         # self.chain = self.comment_model
-        return self.comment_model.make_sentence(tries=100000,
+        return self.comment_model.make_sentence(tries=10000,
             max_overlap_total=MAX_OVERLAP_TOTAL,
             max_overlap_ratio=MAX_OVERLAP_RATIO)
 
@@ -121,6 +115,7 @@ class Account(Base):
         comment = ""
         tries = 0
         while True:
+            print "TRYING"
             # For each sentence, check how close to the average comment length
             # we are, then use the remaining percentage as the chance of
             # adding another sentence. For example, if we're at 70% of the
@@ -138,25 +133,19 @@ class Account(Base):
                 break
 
             if  tries > 10:
+                return False
                 break
 
             new_sentence = self.make_comment_sentence()
 
             if not new_sentence:
                 continue
+                
             comment += " " + new_sentence
 
         comment = comment.strip()
         
         return comment
-
-    def make_selftext_sentence(self):
-        if self.selftext_model:
-            return self.selftext_model.make_sentence(tries=100000,
-                max_overlap_total=MAX_OVERLAP_TOTAL,
-                max_overlap_ratio=MAX_OVERLAP_RATIO)
-        else:
-            return None
 
     def post_comment_on(self):
         name = (db.query(Account)
@@ -165,7 +154,7 @@ class Account(Base):
         print name.name
         try:
             comment = self.build_comment()
-        except Exception, e:
+        except Exception as e:
             print e
             self.last_commented = datetime.now()
             self.num_comments += 1

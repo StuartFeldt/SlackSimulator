@@ -23,14 +23,15 @@ def tryToGetComment(tries):
 	result = sim.make_comment()
 	print result
 	slack_channel = cfg.get("slack", "channel")
-	if(result):
+	if(result['comment']):
 		sc.api_call(
-		"chat.postMessage",
-		channel=slack_channel,
-		text=result['comment'],
-		username=result['name'],
-		icon_url=result['picture']
-	)
+			"chat.postMessage",
+			channel=slack_channel,
+			text=result['comment'],
+			username=result['name'],
+			icon_url=result['picture']
+		)
+		print "ok"
 	else:
 		return tryToGetComment(tries + 1)
 
